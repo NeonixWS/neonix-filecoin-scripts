@@ -1,0 +1,98 @@
+#!/usr/bin/env php
+<?php
+
+function getMinerAsk($minerId) {
+  $ask = ['problem'=>'timeout'];
+  $output = '';
+  
+  $cmd = "lotus client query-ask $minerId";
+
+  $descriptorspec = [
+    1 => array("pipe", "w"),
+  ];
+  $process = proc_open($cmd, $descriptorspec, $pipes);
+  for ($i=0; $i<5; $i++) {
+    $status = proc_get_status($process);
+    if ($status['running'] === false) {
+      if ($status['exitcode'] > 0) {
+        $ask['problem'] = 'error';
+        break;
+      }
+      
+      $output = stream_get_contents($pipes[1]);
+      $ask['problem'] = '';
+      break;
+    }
+    sleep(1);
+  }
+
+  fclose($pipes[1]);
+  proc_terminate($process);
+
+  if ($output) {
+    $output = explode("\n", $output);
+    $ask['priceUnverified'] = explode(' ', $output[1])[3];
+    $ask['priceVerified'] = explode(' ', $output[2])[4];
+    $ask['maxPieceSize'] = substr($output[3], strpos($output[3], ':')+2);
+    $ask['minPieceSize'] = substr($output[4], strpos($output[4], ':')+2);;
+  }
+
+  return $ask;
+}
+
+$cohorts = [
+  'A' => [
+    'f023971',
+    'f022142',
+    'f019551',
+    'f01240',
+    'f01247',
+    'f01278',
+    'f071624',
+    'f0135078', 
+    'f0406322',
+    'f0406703',
+    'f022352',
+    'f014768',
+    'f022163'
+  ],
+  'B' => [
+    'f09848',
+    'f02576',
+    'f02606',
+    'f019041',
+    'f010617',
+    'f023467',
+    'f0157535',
+    'f099608',
+    'f062353',
+    'f07998',
+    'f019362',
+    'f019100'
+  ],
+  'C' => [
+    'f014409',
+    'f066596',
+    'f01234',
+    'f058369',
+    'f08399',
+    'f021716',
+    'f010479',
+    'f08403',
+    'f01277',
+    'f015927'
+  ]
+];
+
+foreach($cohorts as $cohort => $miners) {
+  printf("Cohort %s\n", $cohort);
+  printf(" %9s %20s %20s %10s %10s\n", 'Miner ID', 'Unverified Price', 'Verified Price', 'Min Size', 'Max Size');
+  foreach($miners as $minerId) {
+    $ask = getMinerAsk($minerId);
+    if ($ask['problem']) {
+      printf(" %9s %s\n", $minerId, $ask['problem']);
+    } else {
+      printf(" %9s %20s %20s %10s %10s\n", $minerId, $ask['priceUnverified'], $ask['priceVerified'], $ask['minPieceSize'], $ask['maxPieceSize']);
+    }
+  }
+}
